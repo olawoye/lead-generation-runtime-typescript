@@ -32,7 +32,7 @@ export { ExecutionContext } from './context';
 
 // MCP
 export { ToolRegistry, ToolInvoker, ToolNotFoundError } from './mcp';
-export type { ToolHandler, ToolInvokerOptions } from './mcp';
+export type { ToolHandler, ToolCatalogEntry, ToolSelection, ToolInvokerOptions } from './mcp';
 
 // LLM adapters
 export {

@@ -24,7 +24,7 @@ export interface StepDefinition {
    *  - "llm"   – call an LLM provider
    *  - "noop"  – pass-through (useful for branching / testing)
    */
-  type: 'tool' | 'llm' | 'noop';
+  type?: 'tool' | 'llm' | 'noop';
   /** MCP tool name to invoke when type === "tool". */
   tool?: string;
   /** LLM provider identifier to use when type === "llm". */
@@ -33,10 +33,24 @@ export interface StepDefinition {
   params?: Record<string, unknown>;
   /** IDs of steps that must complete before this step runs. */
   dependsOn?: string[];
+  /** Declarative tool IDs required by the step. */
+  tools?: string[];
+  /** Declarative step input names. */
+  inputs?: string[] | Record<string, unknown>;
+  /** Declarative step output names. */
+  outputs?: string[] | Record<string, unknown>;
+  /** Whether the step is currently enabled. */
+  enabled?: boolean;
+  /** Additional step-level configuration values. */
+  configuration?: Record<string, unknown>;
+  /** Explicit next-step routing instructions. */
+  next_steps?: string[];
   /** Retry policy for this step. */
   retry?: RetryPolicy;
   /** Override the global timeout (ms) for this step. */
   timeoutMs?: number;
+  /** Declarative description of what the step does. */
+  description?: string;
 }
 
 /** Retry policy attached to a step or the whole definition. */

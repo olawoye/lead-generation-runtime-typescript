@@ -1,12 +1,11 @@
 import { AgentDefinition, ExecutionResult } from '../types';
 import { AgentDefinitionLoader } from '../loader/AgentDefinitionLoader';
-import { ToolRegistry } from '../mcp/ToolRegistry';
+import { ToolCatalogEntry, ToolRegistry, ToolSelection, ToolHandler, loadToolkitCatalogFromFile } from '../mcp/ToolRegistry';
 import { ToolInvoker, ToolInvokerOptions } from '../mcp/ToolInvoker';
 import { LLMAdapterRegistry } from '../llm/LLMProviderAdapter';
 import { LLMProviderAdapter } from '../llm/LLMProviderAdapter';
 import { ObservabilityEmitter, EventObserver } from '../observability/ObservabilityEmitter';
 import { Orchestrator, OrchestratorOptions } from './Orchestrator';
-import { ToolHandler } from '../mcp/ToolRegistry';
 
 // ---------------------------------------------------------------------------
 // AgentRuntime – the public entry-point for embedders / service consumers
@@ -67,6 +66,74 @@ export class AgentRuntime {
   registerLLMAdapter(adapter: LLMProviderAdapter): this {
     this.llmRegistry.register(adapter);
     return this;
+  }
+
+  /**
+   * Determine which tool IDs are required by the definition.
+   * Supports both the legacy runtime step shape and the newer declarative shape.
+   */
+  resolveRequiredToolNames(definition: AgentDefinition): string[] {
+    const names = new Set<string>();
+
+    for (const step of definition.steps) {
+      const legacyTool = 'tool' in step && typeof step.tool === 'string' ? step.tool : undefined;
+      if (legacyTool) names.add(legacyTool);
+
+      const declarativeTools = 'tools' in step && Array.isArray(step.tools) ? step.tools : [];
+      for (const toolName of declarativeTools) {
+        if (typeof toolName === 'string') names.add(toolName);
+      }
+    }
+
+    return Array.from(names);
+  }
+
+  /** Select the server/tool subset needed for a given definition from a tool catalog. */
+  resolveToolPlan(
+    definition: AgentDefinition,
+    catalog: readonly ToolCatalogEntry[],
+  ): ToolSelection {
+    return this.toolRegistry.selectByCatalog(catalog as ToolCatalogEntry[], this.resolveRequiredToolNames(definition));
+  }
+
+  /** Resolve the tool plan directly from a toolkit manifest file on disk. */
+  resolveToolPlanFromManifest(
+    definition: AgentDefinition,
+    manifestPath: string,
+  ): ToolSelection {
+    const catalog = loadToolkitCatalogFromFile(manifestPath);
+    return this.resolveToolPlan(definition, catalog);
+  }
+
+  /**
+   * Register only the handlers needed for this definition using a catalog-driven lookup.
+   * Any tool the catalog contains but which is not required is left unloaded.
+   */
+  registerToolPlan(
+    definition: AgentDefinition,
+    catalog: readonly ToolCatalogEntry[],
+    lookup: (toolName: string, tool: ToolCatalogEntry) => ToolHandler | undefined,
+  ): ToolSelection {
+    const plan = this.resolveToolPlan(definition, catalog);
+
+    for (const tool of plan.tools) {
+      const handler = lookup(tool.name, tool);
+      if (handler) {
+        this.registerTool(tool.name, handler);
+      }
+    }
+
+    return plan;
+  }
+
+  /** Register only the handlers needed for this definition from a toolkit manifest file on disk. */
+  registerToolPlanFromManifest(
+    definition: AgentDefinition,
+    manifestPath: string,
+    lookup: (toolName: string, tool: ToolCatalogEntry) => ToolHandler | undefined,
+  ): ToolSelection {
+    const catalog = loadToolkitCatalogFromFile(manifestPath);
+    return this.registerToolPlan(definition, catalog, lookup);
   }
 
   /** Subscribe to runtime observability events. */

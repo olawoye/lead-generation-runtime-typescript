@@ -94,16 +94,139 @@ export class AgentDefinitionLoader {
    * @throws {AgentDefinitionValidationError} if validation fails.
    */
   load(raw: unknown): AgentDefinition {
-    const valid = this.validate(raw);
+    const normalized = this.normalizeDefinition(raw);
+    const valid = this.validate(normalized);
     if (!valid) {
       throw new AgentDefinitionValidationError(
         'Invalid AgentDefinition: schema validation failed',
         this.validate.errors ?? [],
       );
     }
-    const def = raw as AgentDefinition;
-    this.validateSemantics(def);
-    return def;
+    this.validateSemantics(normalized);
+    return normalized;
+  }
+
+  /**
+   * Accept both the legacy runtime definition and the provider-neutral
+   * declarative definition shape used by the definition repo.
+   */
+  private normalizeDefinition(raw: unknown): AgentDefinition {
+    if (!raw || typeof raw !== 'object') {
+      throw new AgentDefinitionValidationError('AgentDefinition input must be an object', []);
+    }
+
+    const candidate = raw as Record<string, unknown>;
+
+    const isDeclarativeDefinition =
+      candidate.apiVersion === 'agent.definition/v1' &&
+      candidate.kind === 'AgentDefinition' &&
+      candidate.spec && typeof candidate.spec === 'object';
+
+    if (!isDeclarativeDefinition) {
+      return raw as AgentDefinition;
+    }
+
+    const metadata = (candidate.metadata ?? {}) as Record<string, unknown>;
+    const spec = candidate.spec as Record<string, unknown>;
+    const policies = (spec.policies ?? {}) as Record<string, unknown>;
+    const steps = Array.isArray(spec.steps) ? spec.steps : [];
+
+    const defaultRetry = this.normalizeRetryConfig(
+      (policies.maxRetries ?? policies.max_retries) !== undefined
+        ? {
+            maxAttempts: Number(policies.maxRetries ?? policies.max_retries),
+            backoffMs: 0,
+          }
+        : undefined,
+    );
+
+    const defaultTimeoutMs =
+      typeof policies.timeoutSeconds === 'number' || typeof policies.timeout_seconds === 'number'
+        ? ((Number(policies.timeoutSeconds ?? policies.timeout_seconds) || 0) * 1000)
+        : undefined;
+
+    return {
+      version: '1.0',
+      id: String((metadata.name as string) ?? 'unnamed-agent'),
+      name: String((metadata.displayName as string) ?? (metadata.name as string) ?? 'Unnamed Agent'),
+      description: typeof metadata.description === 'string' ? metadata.description : undefined,
+      steps: steps.map((step) => {
+        const stepRecord = step as Record<string, unknown>;
+        const stepPolicy = (stepRecord.policy ?? {}) as Record<string, unknown>;
+        const retryConfig = this.normalizeRetryConfig(
+          (stepRecord.retry_policy as Record<string, unknown>) ??
+            ((stepRecord.retry ?? {}) as Record<string, unknown>),
+        );
+        const stepTimeoutMs =
+          typeof stepPolicy.timeoutSeconds === 'number' || typeof stepPolicy.timeout_seconds === 'number'
+            ? ((Number(stepPolicy.timeoutSeconds ?? stepPolicy.timeout_seconds) || 0) * 1000)
+            : undefined;
+
+        const toolIds = Array.isArray(stepRecord.tools) ? stepRecord.tools : [];
+        const toolName = typeof toolIds[0] === 'string' ? toolIds[0] : undefined;
+        const staticParams = {
+          ...(typeof stepRecord.configuration === 'object' && stepRecord.configuration ? stepRecord.configuration : {}),
+          ...(typeof stepRecord.objective !== 'undefined' ? { objective: stepRecord.objective } : {}),
+          ...(typeof stepRecord.inputs !== 'undefined' ? { inputs: stepRecord.inputs } : {}),
+          ...(typeof stepRecord.outputs !== 'undefined' ? { outputs: stepRecord.outputs } : {}),
+          ...(typeof stepRecord.next_steps !== 'undefined' ? { next_steps: stepRecord.next_steps } : {}),
+          ...(typeof stepRecord.quality_rules !== 'undefined' ? { quality_rules: stepRecord.quality_rules } : {}),
+          ...(typeof stepRecord.enabled !== 'undefined' ? { enabled: stepRecord.enabled } : {}),
+        };
+
+        return {
+          id: String(stepRecord.id ?? 'unnamed-step'),
+          name: String(stepRecord.name ?? stepRecord.id ?? 'Unnamed Step'),
+          type: toolName ? 'tool' : 'noop',
+          tool: toolName,
+          params: Object.keys(staticParams).length > 0 ? staticParams : undefined,
+          dependsOn: Array.isArray(stepRecord.dependsOn) ? stepRecord.dependsOn.map(String) : [],
+          retry: retryConfig,
+          timeoutMs: stepTimeoutMs,
+        };
+      }),
+      defaultRetry,
+      defaultTimeoutMs,
+    };
+  }
+
+  private normalizeRetryConfig(
+    value?: Record<string, unknown>,
+  ): AgentDefinition['defaultRetry'] | undefined {
+    if (!value || typeof value !== 'object') {
+      return undefined;
+    }
+
+    const maxAttempts =
+      typeof value.maxAttempts === 'number'
+        ? value.maxAttempts
+        : typeof value.max_attempts === 'number'
+          ? value.max_attempts
+          : undefined;
+
+    const backoffMs =
+      typeof value.backoffMs === 'number'
+        ? value.backoffMs
+        : typeof value.backoff_ms === 'number'
+          ? value.backoff_ms
+          : undefined;
+
+    const backoffMultiplier =
+      typeof value.backoffMultiplier === 'number'
+        ? value.backoffMultiplier
+        : typeof value.backoff_multiplier === 'number'
+          ? value.backoff_multiplier
+          : undefined;
+
+    if (typeof maxAttempts !== 'number' && typeof backoffMs !== 'number') {
+      return undefined;
+    }
+
+    return {
+      maxAttempts: Number(maxAttempts ?? 1),
+      backoffMs: Number(backoffMs ?? 0),
+      ...(typeof backoffMultiplier === 'number' ? { backoffMultiplier } : {}),
+    };
   }
 
   /**

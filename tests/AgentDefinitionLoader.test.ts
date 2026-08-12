@@ -97,4 +97,70 @@ describe('AgentDefinitionLoader', () => {
     };
     expect(() => loader.load(raw)).not.toThrow();
   });
+
+  it('accepts a declarative agent definition from the provider-neutral schema', () => {
+    const raw = {
+      apiVersion: 'agent.definition/v1',
+      kind: 'AgentDefinition',
+      metadata: {
+        name: 'outbound-lead-discovery',
+        version: '1.0.0',
+        displayName: 'Outbound Lead Discovery',
+      },
+      spec: {
+        objective: {
+          summary: 'Discover and qualify outbound leads',
+          successCriteria: ['Return qualified leads'],
+        },
+        orar: {
+          objective: 'Build a target list',
+          resources: ['Company databases'],
+          actions: ['Search', 'Enrich'],
+          results: ['Qualified leads'],
+        },
+        tools: [{ id: 'search_web', description: 'Search the web', capabilities: ['web-search'] }],
+        state: {
+          dedupeKeys: ['domain'],
+          leadRecord: {
+            type: 'object',
+            properties: {
+              company: {
+                type: 'object',
+                description: 'Company details',
+              },
+            },
+          },
+        },
+        steps: [
+          {
+            id: 'search_engine_prospecting',
+            name: 'Search Engine Prospecting',
+            description: 'Search for relevant companies',
+            enabled: true,
+            dependsOn: [],
+            tools: ['search_web'],
+            inputs: ['brief'],
+            outputs: ['results'],
+            configuration: { query: 'Toronto startup attorneys' },
+          },
+          {
+            id: 'lead_enrichment_qualification',
+            name: 'Lead Enrichment & Qualification',
+            description: 'Qualify the discovered leads',
+            enabled: true,
+            dependsOn: ['search_engine_prospecting'],
+            tools: ['search_web'],
+            inputs: ['results'],
+            outputs: ['qualified_leads'],
+          },
+        ],
+      },
+    };
+
+    expect(() => loader.load(raw)).not.toThrow();
+    const def = loader.load(raw);
+    expect(def.id).toBe('outbound-lead-discovery');
+    expect(def.steps).toHaveLength(2);
+    expect(def.steps[0].id).toBe('search_engine_prospecting');
+  });
 });

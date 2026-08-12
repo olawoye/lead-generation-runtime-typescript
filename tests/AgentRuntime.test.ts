@@ -1,6 +1,8 @@
+import * as path from 'path';
 import { AgentRuntime } from '../src/runtime';
 import { AgentDefinition, ExecutionResult, RuntimeEvent } from '../src/types';
 import { StubClaudeAdapter } from '../src/llm';
+import { loadToolkitCatalogFromFile } from '../src/mcp';
 
 const noopDef: AgentDefinition = {
   version: '1.0',
@@ -158,5 +160,134 @@ describe('AgentRuntime – full integration', () => {
     expect(result.executionId).toBeTruthy();
     expect(result.agentId).toBe('test-agent');
     expect(result.durationMs).toBeGreaterThanOrEqual(0);
+  });
+
+  it('selects only the servers and tools needed from a toolkit manifest', () => {
+    const runtime = new AgentRuntime();
+    const def: AgentDefinition = {
+      version: '1.0',
+      id: 'tool-plan-agent',
+      name: 'Tool Plan Agent',
+      steps: [
+        {
+          id: 'search_step',
+          name: 'Search',
+          tools: ['web_search', 'maps_search_places'],
+          inputs: ['brief'],
+          outputs: ['results'],
+        },
+      ],
+    } as AgentDefinition;
+
+    const catalog = [
+      { name: 'web_search', server: 'web-search', capabilities: ['web-search'] },
+      { name: 'web_news_search', server: 'web-search', capabilities: ['news-search'] },
+      { name: 'maps_search_places', server: 'maps', capabilities: ['maps-search'] },
+      { name: 'detect_technologies', server: 'technology-detection', capabilities: ['technology-detection'] },
+    ];
+
+    const plan = runtime.resolveToolPlan(def, catalog);
+    expect(plan.servers.sort()).toEqual(['maps', 'web-search']);
+    expect(plan.tools.map((tool) => tool.name).sort()).toEqual(['maps_search_places', 'web_search']);
+
+    const loadOnlyRequired = runtime.registerToolPlan(def, catalog, (toolName) => {
+      if (toolName === 'web_search') return async () => ({ success: true, data: 'search ok' });
+      if (toolName === 'maps_search_places') return async () => ({ success: true, data: 'place ok' });
+      return undefined;
+    });
+
+    expect(loadOnlyRequired.servers.sort()).toEqual(['maps', 'web-search']);
+    expect(runtime.toolRegistry.listTools().sort()).toEqual(['maps_search_places', 'web_search']);
+  });
+
+  it('loads the real toolkit manifest from disk and resolves the required multi-server set', () => {
+    const runtime = new AgentRuntime();
+    const manifestPath = path.resolve(__dirname, '../../mcp-toolkit/registry/tools.json');
+    const catalog = loadToolkitCatalogFromFile(manifestPath);
+
+    const def: AgentDefinition = {
+      version: '1.0',
+      id: 'manifest-agent',
+      name: 'Manifest Agent',
+      steps: [
+        {
+          id: 'research_step',
+          name: 'Research',
+          tools: ['web_search', 'maps_search_places', 'company_directory_search', 'website_technology_scan'],
+          inputs: ['brief'],
+          outputs: ['results'],
+        },
+      ],
+    } as AgentDefinition;
+
+    const plan = runtime.resolveToolPlan(def, catalog);
+    expect(plan.servers.sort()).toEqual(['business-directories', 'maps', 'web-search', 'website-research']);
+    expect(plan.tools.map((tool) => tool.name).sort()).toEqual([
+      'company_directory_search',
+      'maps_search_places',
+      'web_search',
+      'website_technology_scan',
+    ]);
+  });
+
+  it('resolves the remaining public-data and event-driven discovery capabilities from the manifest', () => {
+    const runtime = new AgentRuntime();
+    const manifestPath = path.resolve(__dirname, '../../mcp-toolkit/registry/tools.json');
+    const catalog = loadToolkitCatalogFromFile(manifestPath);
+
+    const def: AgentDefinition = {
+      version: '1.0',
+      id: 'manifest-agent-final',
+      name: 'Manifest Agent Final',
+      steps: [
+        {
+          id: 'late_stage_search',
+          name: 'Late Stage Search',
+          tools: ['public_records_search', 'events_search', 'signal_monitoring'],
+          inputs: ['brief'],
+          outputs: ['results'],
+        },
+      ],
+    } as AgentDefinition;
+
+    const plan = runtime.resolveToolPlan(def, catalog);
+    expect(plan.servers.sort()).toEqual(['events', 'public-data']);
+    expect(plan.tools.map((tool) => tool.name).sort()).toEqual([
+      'events_search',
+      'public_records_search',
+      'signal_monitoring',
+    ]);
+  });
+
+  it('loads the selected tools directly from a manifest file path', () => {
+    const runtime = new AgentRuntime();
+    const manifestPath = path.resolve(__dirname, '../../mcp-toolkit/registry/tools.json');
+
+    const def: AgentDefinition = {
+      version: '1.0',
+      id: 'manifest-loader-agent',
+      name: 'Manifest Loader Agent',
+      steps: [
+        {
+          id: 'lookup_step',
+          name: 'Lookup',
+          tools: ['web_search', 'company_directory_search'],
+          inputs: ['brief'],
+          outputs: ['results'],
+        },
+      ],
+    } as AgentDefinition;
+
+    const plan = runtime.resolveToolPlanFromManifest(def, manifestPath);
+    expect(plan.servers.sort()).toEqual(['business-directories', 'web-search']);
+    expect(plan.tools.map((tool) => tool.name).sort()).toEqual(['company_directory_search', 'web_search']);
+
+    runtime.registerToolPlanFromManifest(def, manifestPath, (toolName) => {
+      if (toolName === 'web_search') return async () => ({ success: true, data: 'search ok' });
+      if (toolName === 'company_directory_search') return async () => ({ success: true, data: 'directory ok' });
+      return undefined;
+    });
+
+    expect(runtime.toolRegistry.listTools().sort()).toEqual(['company_directory_search', 'web_search']);
   });
 });

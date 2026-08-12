@@ -72,3 +72,26 @@ describe('ToolNotFoundError', () => {
     expect(err.message).toMatch(/my_tool/);
   });
 });
+
+describe('Capability-based tool planning', () => {
+  it('selects only the required servers and tools for a run', () => {
+    const manifest = {
+      version: '0.1.0',
+      tools: [
+        { name: 'web_search', server: 'web-search', capabilities: ['web-search'] },
+        { name: 'web_news_search', server: 'web-search', capabilities: ['news-search'] },
+        { name: 'maps_search_places', server: 'maps', capabilities: ['maps-search'] },
+        { name: 'detect_technologies', server: 'technology-detection', capabilities: ['technology-detection'] },
+      ],
+    };
+
+    const registry = new ToolRegistry();
+    registry.register('web_search', jest.fn());
+    registry.register('maps_search_places', jest.fn());
+
+    const selected = registry.selectByCatalog(manifest.tools, ['web_search', 'maps_search_places']);
+
+    expect(selected.tools.map((tool) => tool.name).sort()).toEqual(['maps_search_places', 'web_search']);
+    expect(selected.servers.sort()).toEqual(['maps', 'web-search']);
+  });
+});

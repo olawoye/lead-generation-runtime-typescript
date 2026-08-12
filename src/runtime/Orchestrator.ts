@@ -235,12 +235,14 @@ export class Orchestrator {
   // ---------------------------------------------------------------------------
 
   private async dispatchStep(
-    step: { type: string; tool?: string; provider?: string; params?: Record<string, unknown> },
+    step: { type?: string; tool?: string; provider?: string; params?: Record<string, unknown> },
     inputs: Record<string, unknown>,
     timeoutMs: number,
     executionId: string,
   ): Promise<unknown> {
-    switch (step.type) {
+    const stepType = step.type ?? (step.tool ? 'tool' : step.provider ? 'llm' : 'noop');
+
+    switch (stepType) {
       case 'tool':
         return this.dispatchTool(step.tool!, inputs, timeoutMs, executionId);
       case 'llm':
@@ -248,7 +250,7 @@ export class Orchestrator {
       case 'noop':
         return inputs;
       default:
-        throw new OrchestratorError(`Unknown step type: "${step.type}"`);
+        throw new OrchestratorError(`Unknown step type: "${stepType}"`);
     }
   }
 

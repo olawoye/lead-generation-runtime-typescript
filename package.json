@@ -1,16 +1,29 @@
 {
-  "name": "lead-generation-runtime-typescript",
+  "name": "@olawoye/lead-generation-runtime-typescript",
   "version": "0.1.0",
   "description": "Production-oriented, platform-agnostic TypeScript agent runtime for executing Agent Definitions via the MCP Toolkit",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "scripts": {
     "build": "tsc --project tsconfig.build.json",
     "lint": "eslint \"src/**/*.ts\" \"tests/**/*.ts\"",
     "lint:fix": "eslint \"src/**/*.ts\" \"tests/**/*.ts\" --fix",
     "test": "jest",
     "test:coverage": "jest --coverage",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "prepack": "npm run build"
   },
   "keywords": [
     "agent",
@@ -18,9 +31,19 @@
     "mcp",
     "typescript",
     "llm",
-    "lead-generation"
+    "lead-generation",
+    "ai-agent",
+    "orchestration"
   ],
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/your-org/lead-generation-runtime-typescript.git"
+  },
+  "homepage": "https://github.com/your-org/lead-generation-runtime-typescript#readme",
+  "publishConfig": {
+    "access": "public"
+  },
   "dependencies": {
     "ajv": "^8.17.1",
     "ajv-formats": "^3.0.1",
