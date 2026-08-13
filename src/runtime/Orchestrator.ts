@@ -107,6 +107,12 @@ export class Orchestrator {
       agentName: definition.name,
       runInput,
     });
+    callbacks.onRunStart?.({
+      executionId,
+      agentId: definition.id,
+      runInput,
+      startedAt,
+    });
 
     const resolvedSteps = this.resolver.resolve(
       definition.steps,
@@ -195,6 +201,16 @@ export class Orchestrator {
       checkpoint: finalCheckpoint,
       error: executionError,
     };
+
+    if (executionStatus === 'failed' || executionStatus === 'cancelled') {
+      callbacks.onRunError?.({
+        executionId,
+        agentId: definition.id,
+        status: executionStatus,
+        error: executionError ?? 'Execution failed',
+        checkpoint: finalCheckpoint,
+      });
+    }
 
     callbacks.onCheckpoint?.(finalCheckpoint);
     callbacks.onRunEnd?.(executionResult);

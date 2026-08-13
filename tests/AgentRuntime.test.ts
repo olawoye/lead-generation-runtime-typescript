@@ -163,6 +163,43 @@ describe('AgentRuntime – full integration', () => {
     expect(runResults[0].status).toBe('succeeded');
   });
 
+  it('supports the declarative agent.definition/v1 shape and explicit run lifecycle hooks', async () => {
+    const runtime = new AgentRuntime();
+    const started: Array<{ executionId: string; agentId: string }> = [];
+    const errors: Array<{ executionId: string; status: string }> = [];
+
+    const declarativeDefinition = {
+      apiVersion: 'agent.definition/v1',
+      kind: 'AgentDefinition',
+      metadata: {
+        name: 'declarative-agent',
+        displayName: 'Declarative Agent',
+        description: 'A declarative definition',
+      },
+      spec: {
+        objective: 'Test declarative loading',
+        steps: [{ id: 's1', name: 'noop', type: 'noop' }],
+      },
+    } as const;
+
+    const result = await runtime.runRaw(declarativeDefinition, {
+      runInput: { campaignId: 'campaign-abc' },
+      callbacks: {
+        onRunStart: (event) => {
+          started.push({ executionId: event.executionId, agentId: event.agentId });
+        },
+        onRunError: (event) => {
+          errors.push({ executionId: event.executionId, status: event.status });
+        },
+      },
+    });
+
+    expect(result.status).toBe('succeeded');
+    expect(started).toHaveLength(1);
+    expect(started[0].agentId).toBe('declarative-agent');
+    expect(errors).toHaveLength(0);
+  });
+
   it('supports a repository-style worker that persists and resumes from a checkpoint store', async () => {
     const runtime = new AgentRuntime();
     const store = new InMemoryExecutionStore();

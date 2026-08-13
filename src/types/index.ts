@@ -63,8 +63,8 @@ export interface RetryPolicy {
   backoffMultiplier?: number;
 }
 
-/** Root Agent Definition document. */
-export interface AgentDefinition {
+/** Runtime-native agent definition shape used by orchestration code. */
+export interface RuntimeAgentDefinition {
   /** Schema version – enables forward-compat validation. */
   version: AgentDefinitionVersion;
   /** Machine-readable identifier for this agent. */
@@ -79,6 +79,64 @@ export interface AgentDefinition {
   defaultRetry?: RetryPolicy;
   /** Global step timeout in milliseconds (default: 30 000). */
   defaultTimeoutMs?: number;
+}
+
+/** Declarative agent.definition/v1 metadata block. */
+export interface AgentDefinitionMetadata {
+  name: string;
+  displayName?: string;
+  description?: string;
+  version?: string;
+}
+
+/** Declarative step definition used in the agent.definition/v1 YAML/JSON schema. */
+export interface DeclarativeStepDefinition {
+  id: string;
+  name?: string;
+  type?: 'tool' | 'llm' | 'noop';
+  objective?: unknown;
+  tools?: string[];
+  inputs?: unknown;
+  outputs?: unknown;
+  dependsOn?: string[];
+  configuration?: Record<string, unknown>;
+  policy?: Record<string, unknown>;
+  retry_policy?: Record<string, unknown>;
+  next_steps?: string[];
+  quality_rules?: unknown;
+  enabled?: boolean;
+}
+
+/** Declarative agent.definition/v1 document shape used by the definition package. */
+export interface AgentDefinitionV1 {
+  apiVersion: 'agent.definition/v1';
+  kind: 'AgentDefinition';
+  metadata: AgentDefinitionMetadata;
+  spec: {
+    objective?: unknown;
+    orar?: unknown;
+    state?: unknown;
+    options?: Record<string, unknown>;
+    policies?: Record<string, unknown>;
+    tools?: string[];
+    steps?: DeclarativeStepDefinition[];
+  };
+}
+
+/** Root Agent Definition document.
+ *
+ * This is intentionally compatible with both the runtime-native shape and the
+ * declarative agent.definition/v1 shape used by the definition repo.
+ */
+export interface AgentDefinition extends RuntimeAgentDefinition {
+  /** Declarative agent.definition/v1 metadata when present. */
+  apiVersion?: 'agent.definition/v1';
+  /** Declarative agent kind marker when present. */
+  kind?: 'AgentDefinition';
+  /** Declarative metadata block when present. */
+  metadata?: AgentDefinitionMetadata;
+  /** Declarative spec block when present. */
+  spec?: AgentDefinitionV1['spec'];
 }
 
 /** Runtime input provided by the SaaS host for a single run. */
@@ -115,11 +173,30 @@ export interface RunCheckpoint {
   error?: string;
 }
 
+/** App-facing lifecycle payload emitted when a run begins. */
+export interface RunStartedEvent {
+  executionId: string;
+  agentId: string;
+  runInput: RunInput;
+  startedAt: Date;
+}
+
+/** App-facing lifecycle payload emitted when a run fails or is cancelled. */
+export interface RunErrorEvent {
+  executionId: string;
+  agentId: string;
+  status: ExecutionStatus;
+  error: string;
+  checkpoint?: RunCheckpoint;
+}
+
 /** Callback hooks invoked by a stateless runtime so the SaaS app can persist state. */
 export interface RuntimeCallbacks {
+  onRunStart?: (event: RunStartedEvent) => void;
   onStepStart?: (event: StepLifecycleEvent) => void;
   onStepResult?: (event: StepLifecycleEvent) => void;
   onCheckpoint?: (checkpoint: RunCheckpoint) => void;
+  onRunError?: (event: RunErrorEvent) => void;
   onRunEnd?: (result: ExecutionResult) => void;
 }
 

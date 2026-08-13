@@ -9,6 +9,10 @@
 export type {
   AgentDefinition,
   AgentDefinitionVersion,
+  RuntimeAgentDefinition,
+  AgentDefinitionMetadata,
+  DeclarativeStepDefinition,
+  AgentDefinitionV1,
   StepDefinition,
   RetryPolicy,
   ToolInput,
@@ -25,6 +29,8 @@ export type {
   RunInput,
   StepLifecycleEvent,
   RunCheckpoint,
+  RunStartedEvent,
+  RunErrorEvent,
   RuntimeCallbacks,
 } from './types';
 

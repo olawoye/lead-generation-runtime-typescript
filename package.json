@@ -38,9 +38,9 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/your-org/lead-generation-runtime-typescript.git"
+    "url": "git+https://github.com/olawoye/lead-generation-runtime-typescript.git"
   },
-  "homepage": "https://github.com/your-org/lead-generation-runtime-typescript#readme",
+  "homepage": "https://github.com/olawoye/lead-generation-runtime-typescript#readme",
   "publishConfig": {
     "access": "public"
   },
