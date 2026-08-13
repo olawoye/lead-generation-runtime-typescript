@@ -7,13 +7,13 @@ This package provides the execution engine for declarative agent definitions. It
 ## Install
 
 ```bash
-npm install @your-org/lead-generation-runtime
+npm install @olawoye/lead-generation-runtime-typescript
 ```
 
 ## Quick example
 
 ```ts
-import { AgentRuntime } from '@your-org/lead-generation-runtime';
+import { AgentRuntime } from '@olawoye/lead-generation-runtime-typescript';
 
 const runtime = new AgentRuntime();
 
@@ -28,6 +28,60 @@ const result = await runtime.run(definition);
 console.log(result.status);
 ```
 
+## Architecture
+
+This package is the stateless execution layer. It is responsible for:
+
+- validating and loading agent definitions
+- resolving execution order and dependencies
+- invoking tool handlers and LLM adapters
+- emitting lifecycle events and deterministic checkpoint payloads
+- returning a complete execution result to the host
+
+The SaaS app owns the durable state. It decides how to:
+
+- persist checkpoints
+- store step lifecycle events
+- resume work from a prior checkpoint
+- handle retries, cancellations, tenancy, auditing, and billing
+
+## Persistence contract
+
+```ts
+import { AgentRuntime, createPersistenceCallbacks } from '@olawoye/lead-generation-runtime-typescript';
+
+const runtime = new AgentRuntime();
+
+const result = await runtime.run(definition, {
+  runInput: { campaignId: 'campaign-123' },
+  callbacks: createPersistenceCallbacks({
+    saveStepEvent: async (event) => {
+      await myStore.saveStepEvent(event);
+    },
+    saveCheckpoint: async (checkpoint) => {
+      await myStore.saveCheckpoint(checkpoint);
+    },
+    saveRunResult: async (execution) => {
+      await myStore.saveRun(execution);
+    },
+  }),
+});
+```
+
+## Host-side worker pattern
+
+```ts
+import { AgentRuntime, InMemoryExecutionStore, ExecutionWorker } from '@olawoye/lead-generation-runtime-typescript';
+
+const runtime = new AgentRuntime();
+const store = new InMemoryExecutionStore();
+const worker = new ExecutionWorker(runtime, store);
+
+const result = await worker.run(definition, {
+  runInput: { campaignId: 'campaign-123' },
+});
+```
+
 ## What this package provides
 
 - Agent definition validation and loading
@@ -35,8 +89,6 @@ console.log(result.status);
 - Tool plan resolution from a catalog or manifest
 - LLM adapter registration
 - Execution observability and retry handling
-- Separation between product logic and agent orchestration
-
-## Intended usage
-
-This runtime is intended to be integrated into a SaaS app that owns tenant state, job queues, CRM data, and user workflows. The app loads the agent definition, starts background execution via the runtime, and persists the returned results into its own domain models.
+- Stateless runtime contract for SaaS-side persistence
+- Resume-aware checkpoint lifecycle support
+- Clear separation between orchestration and product ownership

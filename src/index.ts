@@ -22,6 +22,10 @@ export type {
   ExecutionResult,
   RuntimeEventType,
   RuntimeEvent,
+  RunInput,
+  StepLifecycleEvent,
+  RunCheckpoint,
+  RuntimeCallbacks,
 } from './types';
 
 // Loader
@@ -52,5 +56,20 @@ export { ObservabilityEmitter } from './observability';
 export type { EventObserver } from './observability';
 
 // Runtime (main entry-points)
-export { AgentRuntime, Orchestrator, OrchestratorError } from './runtime';
-export type { AgentRuntimeOptions, OrchestratorOptions } from './runtime';
+export {
+  AgentRuntime,
+  Orchestrator,
+  OrchestratorError,
+  createPersistenceCallbacks,
+  InMemoryExecutionStore,
+  InMemoryExecutionRepository,
+  ExecutionWorker,
+} from './runtime';
+export type {
+  AgentRuntimeOptions,
+  OrchestratorOptions,
+  ExecutionStore,
+  ExecutionRecord,
+  ExecutionRepository,
+  ExecutionWorkerOptions,
+} from './runtime';

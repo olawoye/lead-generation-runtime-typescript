@@ -1,8 +1,8 @@
 import * as path from 'path';
-import { AgentRuntime } from '../src/runtime';
+import { AgentRuntime, createPersistenceCallbacks, InMemoryExecutionStore, InMemoryExecutionRepository, ExecutionWorker } from '../src/runtime';
 import { AgentDefinition, ExecutionResult, RuntimeEvent } from '../src/types';
 import { StubClaudeAdapter } from '../src/llm';
-import { loadToolkitCatalogFromFile } from '../src/mcp';
+import { loadToolkitCatalogFromFile, CANONICAL_TOOL_MAP } from '../src/mcp';
 
 const noopDef: AgentDefinition = {
   version: '1.0',
@@ -96,6 +96,105 @@ describe('AgentRuntime – full integration', () => {
     expect(types).toContain('execution.succeeded');
     expect(types).toContain('step.started');
     expect(types).toContain('step.succeeded');
+  });
+
+  it('emits deterministic checkpoint payloads and callbacks for stateless runs', async () => {
+    const runtime = new AgentRuntime();
+    const stepStarts: Array<{ executionId: string; stepId: string }> = [];
+    const stepResults: Array<{ executionId: string; stepId: string; status: string }> = [];
+    const checkpoints: Array<{ executionId: string; status: string; stepResults: unknown[] }> = [];
+
+    const result = await runtime.run(noopDef, {
+      runInput: { campaignId: 'campaign-123' },
+      callbacks: {
+        onStepStart: (event) => stepStarts.push(event),
+        onStepResult: (event) => stepResults.push(event),
+        onCheckpoint: (checkpoint) => checkpoints.push(checkpoint),
+        onRunEnd: (payload) => {
+          expect(payload.status).toBe('succeeded');
+        },
+      },
+    });
+
+    expect(stepStarts).toHaveLength(1);
+    expect(stepStarts[0].stepId).toBe('step1');
+    expect(stepResults).toHaveLength(1);
+    expect(stepResults[0].status).toBe('succeeded');
+    expect(checkpoints.length).toBeGreaterThanOrEqual(1);
+    expect(checkpoints[0].executionId).toBe(result.executionId);
+    expect(result.checkpoint).toEqual(checkpoints[checkpoints.length - 1]);
+  });
+
+  it('persists lifecycle events and checkpoints through a SaaS-owned adapter', async () => {
+    const runtime = new AgentRuntime();
+    const stepEvents: Array<{ executionId: string; stepId: string; status: string }> = [];
+    const checkpoints: Array<{ executionId: string; status: string }> = [];
+    const runResults: ExecutionResult[] = [];
+
+    const result = await runtime.run(noopDef, {
+      runInput: { campaignId: 'campaign-456' },
+      callbacks: createPersistenceCallbacks({
+        saveStepEvent: (event) => {
+          void stepEvents.push({
+            executionId: event.executionId,
+            stepId: event.stepId,
+            status: event.status,
+          });
+        },
+        saveCheckpoint: (checkpoint) => {
+          void checkpoints.push({
+            executionId: checkpoint.executionId,
+            status: checkpoint.status,
+          });
+        },
+        saveRunResult: (execution) => {
+          void runResults.push(execution);
+        },
+      }),
+    });
+
+    expect(stepEvents).toHaveLength(2);
+    expect(stepEvents[0].stepId).toBe('step1');
+    expect(stepEvents[0].status).toBe('running');
+    expect(stepEvents[1].status).toBe('succeeded');
+    expect(checkpoints.length).toBeGreaterThanOrEqual(1);
+    expect(checkpoints[checkpoints.length - 1].executionId).toBe(result.executionId);
+    expect(runResults).toHaveLength(1);
+    expect(runResults[0].status).toBe('succeeded');
+  });
+
+  it('supports a repository-style worker that persists and resumes from a checkpoint store', async () => {
+    const runtime = new AgentRuntime();
+    const store = new InMemoryExecutionStore();
+    const worker = new ExecutionWorker(runtime, store);
+
+    const initial = await worker.run(noopDef, { runInput: { campaignId: 'campaign-789' } });
+    expect(initial.status).toBe('succeeded');
+
+    const resumed = await worker.run(noopDef, {
+      runInput: { campaignId: 'campaign-789' },
+      executionId: initial.executionId,
+    });
+
+    expect(resumed.executionId).toBe(initial.executionId);
+    expect(resumed.status).toBe('succeeded');
+    expect(await store.loadLatestCheckpoint(initial.executionId)).toBeTruthy();
+  });
+
+  it('supports a tenant-scoped execution repository for app-owned persistence', async () => {
+    const runtime = new AgentRuntime();
+    const repo = new InMemoryExecutionRepository('tenant-1');
+    const worker = new ExecutionWorker(runtime, repo);
+
+    const result = await worker.run(noopDef, {
+      executionId: 'repo-run-1',
+      runInput: { campaignId: 'campaign-tenant' },
+    });
+
+    expect(result.status).toBe('succeeded');
+    expect((await repo.findByTenant('tenant-1')).length).toBeGreaterThan(0);
+    await repo.markCancelled('repo-run-1');
+    expect((await repo.loadExecution('repo-run-1'))?.status).toBe('cancelled');
   });
 
   it('runs raw definition through loader validation', async () => {
@@ -198,6 +297,47 @@ describe('AgentRuntime – full integration', () => {
 
     expect(loadOnlyRequired.servers.sort()).toEqual(['maps', 'web-search']);
     expect(runtime.toolRegistry.listTools().sort()).toEqual(['maps_search_places', 'web_search']);
+  });
+
+  it('exposes a canonical tool map that matches the toolkit registry vocabulary', () => {
+    expect(CANONICAL_TOOL_MAP.google_search).toBe('web_search');
+    expect(CANONICAL_TOOL_MAP.maps).toBe('maps_search_places');
+    expect(CANONICAL_TOOL_MAP.business_directory_search).toBe('company_directory_search');
+    expect(CANONICAL_TOOL_MAP.website_research).toBe('website_content_research');
+    expect(CANONICAL_TOOL_MAP.lead_scoring).toBe('lead_scoring');
+  });
+
+  it('resolves declarative logical tool ids into the concrete toolkit tool names through a canonical capability map', () => {
+    const runtime = new AgentRuntime();
+    const catalog = [
+      { name: 'web_search', server: 'web-search', capabilities: ['web-search'] },
+      { name: 'maps_search_places', server: 'maps', capabilities: ['maps-search'] },
+      { name: 'company_directory_search', server: 'business-directories', capabilities: ['business-directory', 'company-discovery'] },
+      { name: 'website_technology_scan', server: 'website-research', capabilities: ['website-analysis', 'technology-detection'] },
+    ];
+
+    const def: AgentDefinition = {
+      version: '1.0',
+      id: 'logical-tool-id-agent',
+      name: 'Logical Tool Id Agent',
+      steps: [
+        {
+          id: 'research_step',
+          name: 'Research',
+          tools: ['google_search', 'maps', 'business_directory_search', 'website_research'],
+          inputs: ['brief'],
+          outputs: ['results'],
+        },
+      ],
+    };
+
+    const plan = runtime.resolveToolPlan(def, catalog);
+    expect(plan.tools.map((tool) => tool.name).sort()).toEqual([
+      'company_directory_search',
+      'maps_search_places',
+      'web_search',
+      'website_technology_scan',
+    ]);
   });
 
   it('loads the real toolkit manifest from disk and resolves the required multi-server set', () => {

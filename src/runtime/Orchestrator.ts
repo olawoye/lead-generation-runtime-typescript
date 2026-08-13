@@ -6,6 +6,10 @@ import {
   StepResult,
   StepStatus,
   LLMRequest,
+  RunCheckpoint,
+  RuntimeCallbacks,
+  StepLifecycleEvent,
+  RunInput,
 } from '../types';
 import { ExecutionContext } from '../context/ExecutionContext';
 import { ToolInvoker } from '../mcp/ToolInvoker';
@@ -18,10 +22,20 @@ import { StepResolver, ResolvedStep } from '../resolver/StepResolver';
 // ---------------------------------------------------------------------------
 
 export interface OrchestratorOptions {
+  /** Stable execution ID supplied by the SaaS host for resume / persistence flows. */
+  executionId?: string;
   /** Global default step timeout in ms. Overridden by definition/step values. */
   defaultTimeoutMs?: number;
   /** Initial inputs injected into every execution context. */
   inputs?: Record<string, unknown>;
+  /** SaaS-owned run input payload for a single execution. */
+  runInput?: RunInput;
+  /** Resume from a previously persisted checkpoint. */
+  resumeFromCheckpoint?: RunCheckpoint;
+  /** Optional cancellation signal. */
+  cancelSignal?: { aborted?: boolean; cancelled?: boolean } | (() => boolean);
+  /** Stateless lifecycle callbacks so the app can persist event/checkpoint state. */
+  callbacks?: RuntimeCallbacks;
 }
 
 // ---------------------------------------------------------------------------
@@ -68,18 +82,30 @@ export class Orchestrator {
     definition: AgentDefinition,
     options: OrchestratorOptions = {},
   ): Promise<ExecutionResult> {
-    const executionId = uuidv4();
+    const executionId = options.executionId ?? uuidv4();
     const startedAt = new Date();
+    const runInput = (options.runInput ?? options.inputs ?? {}) as Record<string, unknown>;
+    const callbacks = options.callbacks ?? {};
 
     const ctx = new ExecutionContext(
       executionId,
       definition.id,
-      options.inputs ?? {},
+      runInput,
     );
+
+    if (options.resumeFromCheckpoint) {
+      for (const result of options.resumeFromCheckpoint.stepResults) {
+        ctx.recordResult(result);
+        if (result.output !== undefined) {
+          ctx.setOutput(result.stepId, result.output);
+        }
+      }
+    }
 
     this.emitter.emit('execution.started', executionId, {
       agentId: definition.id,
       agentName: definition.name,
+      runInput,
     });
 
     const resolvedSteps = this.resolver.resolve(
@@ -92,6 +118,16 @@ export class Orchestrator {
     let executionError: string | undefined;
 
     for (const resolved of resolvedSteps) {
+      if (options.resumeFromCheckpoint && options.resumeFromCheckpoint.completedStepIds.includes(resolved.definition.id)) {
+        continue;
+      }
+
+      if (this.isCancelled(options.cancelSignal)) {
+        executionStatus = 'cancelled';
+        executionError = 'Execution cancelled by caller';
+        break;
+      }
+
       const dep = resolved.definition.dependsOn ?? [];
       if (dep.length > 0 && !ctx.allSucceeded(dep)) {
         const skippedResult = this.makeSkippedResult(resolved, 'Dependencies did not all succeed');
@@ -103,13 +139,28 @@ export class Orchestrator {
         continue;
       }
 
-      const result = await this.executeStep(resolved, ctx, executionId);
+      const result = await this.executeStep(resolved, ctx, executionId, runInput, callbacks);
       ctx.recordResult(result);
 
       if (result.status === 'failed' || result.status === 'timed_out') {
         executionStatus = 'failed';
         executionError = result.error;
       }
+
+      const checkpoint = this.buildCheckpoint(
+        executionId,
+        definition.id,
+        executionStatus === 'failed' ? 'failed' : 'running',
+        startedAt,
+        new Date(),
+        runInput,
+        [...ctx.getResults()],
+        result,
+        executionError,
+      );
+
+      callbacks.onCheckpoint?.(checkpoint);
+      this.emitter.emit('execution.started', executionId, { checkpoint });
     }
 
     if (executionStatus === 'running') {
@@ -117,21 +168,41 @@ export class Orchestrator {
     }
 
     const finishedAt = new Date();
+    const finalResults = [...ctx.getResults()];
+    const finalOutput = finalResults.length > 0 ? finalResults[finalResults.length - 1].output : undefined;
+    const finalCheckpoint = this.buildCheckpoint(
+      executionId,
+      definition.id,
+      executionStatus,
+      startedAt,
+      finishedAt,
+      runInput,
+      finalResults,
+      undefined,
+      executionError,
+      finalOutput,
+    );
+
     const executionResult: ExecutionResult = {
       executionId,
       agentId: definition.id,
       status: executionStatus,
-      stepResults: [...ctx.getResults()],
+      stepResults: finalResults,
       startedAt,
       finishedAt,
       durationMs: finishedAt.getTime() - startedAt.getTime(),
+      finalOutput,
+      checkpoint: finalCheckpoint,
       error: executionError,
     };
 
+    callbacks.onCheckpoint?.(finalCheckpoint);
+    callbacks.onRunEnd?.(executionResult);
+
     this.emitter.emit(
-      executionStatus === 'succeeded' ? 'execution.succeeded' : 'execution.failed',
+      executionStatus === 'succeeded' ? 'execution.succeeded' : executionStatus === 'cancelled' ? 'execution.failed' : 'execution.failed',
       executionId,
-      { agentId: definition.id, status: executionStatus },
+      { agentId: definition.id, status: executionStatus, checkpoint: finalCheckpoint },
     );
 
     return executionResult;
@@ -145,6 +216,8 @@ export class Orchestrator {
     resolved: ResolvedStep,
     ctx: ExecutionContext,
     executionId: string,
+    runInput: RunInput,
+    callbacks: RuntimeCallbacks,
   ): Promise<StepResult> {
     const { definition, retry, timeoutMs } = resolved;
     const stepInputs = ctx.buildStepInputs(
@@ -152,7 +225,18 @@ export class Orchestrator {
       definition.dependsOn,
     );
 
-    this.emitter.emit('step.started', executionId, { stepId: definition.id });
+    const stepStartEvent: StepLifecycleEvent = {
+      executionId,
+      agentId: definition.id,
+      stepId: definition.id,
+      stepName: definition.name,
+      status: 'running',
+      startedAt: new Date(),
+      inputs: stepInputs,
+    };
+
+    callbacks.onStepStart?.(stepStartEvent);
+    this.emitter.emit('step.started', executionId, { stepId: definition.id, stepName: definition.name, payload: stepStartEvent });
 
     const startedAt = new Date();
     let lastError = '';
@@ -196,13 +280,41 @@ export class Orchestrator {
           finishedAt,
           durationMs: finishedAt.getTime() - startedAt.getTime(),
         };
-        this.emitter.emit('step.succeeded', executionId, { stepId: definition.id, output });
+        const stepEvent: StepLifecycleEvent = {
+          executionId,
+          agentId: definition.id,
+          stepId: definition.id,
+          stepName: definition.name,
+          status: 'succeeded',
+          attempt: attempts,
+          startedAt,
+          finishedAt,
+          durationMs: finishedAt.getTime() - startedAt.getTime(),
+          output,
+          inputs: stepInputs,
+        };
+        callbacks.onStepResult?.(stepEvent);
+        this.emitter.emit('step.succeeded', executionId, { stepId: definition.id, output, payload: stepEvent });
         return result;
       }
 
       if (stepStatus === 'timed_out') {
         const finishedAt = new Date();
-        this.emitter.emit('step.timed_out', executionId, { stepId: definition.id });
+        const stepEvent: StepLifecycleEvent = {
+          executionId,
+          agentId: definition.id,
+          stepId: definition.id,
+          stepName: definition.name,
+          status: 'timed_out',
+          attempt: attempts,
+          startedAt,
+          finishedAt,
+          durationMs: finishedAt.getTime() - startedAt.getTime(),
+          error: lastError,
+          inputs: stepInputs,
+        };
+        callbacks.onStepResult?.(stepEvent);
+        this.emitter.emit('step.timed_out', executionId, { stepId: definition.id, payload: stepEvent });
         return {
           stepId: definition.id,
           stepName: definition.name,
@@ -217,7 +329,21 @@ export class Orchestrator {
     }
 
     const finishedAt = new Date();
-    this.emitter.emit('step.failed', executionId, { stepId: definition.id, error: lastError });
+    const stepEvent: StepLifecycleEvent = {
+      executionId,
+      agentId: definition.id,
+      stepId: definition.id,
+      stepName: definition.name,
+      status: 'failed',
+      attempt: attempts,
+      startedAt,
+      finishedAt,
+      durationMs: finishedAt.getTime() - startedAt.getTime(),
+      error: lastError,
+      inputs: stepInputs,
+    };
+    callbacks.onStepResult?.(stepEvent);
+    this.emitter.emit('step.failed', executionId, { stepId: definition.id, error: lastError, payload: stepEvent });
     return {
       stepId: definition.id,
       stepName: definition.name,
@@ -336,6 +462,41 @@ export class Orchestrator {
         },
       );
     });
+  }
+
+  private isCancelled(cancelSignal?: OrchestratorOptions['cancelSignal']): boolean {
+    if (!cancelSignal) return false;
+    if (typeof cancelSignal === 'function') return cancelSignal();
+    if ('aborted' in cancelSignal && cancelSignal.aborted) return true;
+    if ('cancelled' in cancelSignal && cancelSignal.cancelled) return true;
+    return false;
+  }
+
+  private buildCheckpoint(
+    executionId: string,
+    agentId: string,
+    status: ExecutionStatus,
+    startedAt: Date,
+    updatedAt: Date,
+    runInput: RunInput,
+    stepResults: StepResult[],
+    lastStepResult?: StepResult,
+    error?: string,
+    finalOutput?: unknown,
+  ): RunCheckpoint {
+    return {
+      executionId,
+      agentId,
+      status,
+      createdAt: startedAt,
+      updatedAt,
+      runInput,
+      completedStepIds: stepResults.map((result) => result.stepId),
+      currentStepId: lastStepResult?.stepId,
+      stepResults,
+      finalOutput: finalOutput ?? lastStepResult?.output,
+      error,
+    };
   }
 
   private sleep(ms: number): Promise<void> {

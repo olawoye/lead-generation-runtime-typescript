@@ -47,6 +47,22 @@ export interface ToolSelection {
   servers: string[];
 }
 
+export const CANONICAL_TOOL_MAP = {
+  google_search: 'web_search',
+  maps: 'maps_search_places',
+  business_directory_search: 'company_directory_search',
+  public_records_search: 'public_records_search',
+  marketplace_search: 'marketplace_search',
+  website_research: 'website_content_research',
+  technology_detection: 'detect_technologies',
+  competitive_intelligence_search: 'competitive_intelligence_search',
+  events_search: 'events_search',
+  signal_monitoring: 'signal_monitoring',
+  company_enrichment: 'enrich_company',
+  person_enrichment: 'enrich_person',
+  lead_scoring: 'lead_scoring',
+} as const;
+
 export function loadToolkitCatalogFromFile(filePath: string): ToolCatalogEntry[] {
   const raw = readFileSync(filePath, 'utf8');
   const parsed = JSON.parse(raw) as { tools?: ToolCatalogEntry[] };
@@ -55,6 +71,29 @@ export function loadToolkitCatalogFromFile(filePath: string): ToolCatalogEntry[]
 
 export class ToolRegistry {
   private readonly handlers = new Map<string, ToolHandler>();
+
+  private static canonicalize(value: string): string {
+    return value
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+  }
+
+  private static readonly logicalToolAliases: Record<string, string[]> = {
+    google_search: ['web_search'],
+    maps: ['maps_search_places'],
+    business_directory_search: ['company_directory_search'],
+    public_records_search: ['public_records_search'],
+    marketplace_search: ['marketplace_search'],
+    website_research: ['website_content_research', 'website_technology_scan'],
+    technology_detection: ['detect_technologies'],
+    competitive_intelligence_search: ['competitive_intelligence_search'],
+    events_search: ['events_search'],
+    signal_monitoring: ['signal_monitoring'],
+    company_enrichment: ['enrich_company'],
+    person_enrichment: ['enrich_person'],
+  };
 
   /** Register (or replace) a tool handler. */
   register(name: string, handler: ToolHandler): void {
@@ -85,13 +124,60 @@ export class ToolRegistry {
     catalog: ToolCatalogEntry[],
     requiredToolNames: string[],
   ): ToolSelection {
-    const required = new Set(requiredToolNames);
-    const selectedTools = catalog.filter((tool) => required.has(tool.name));
+    const requiredNames = this.resolveRequiredToolNames(catalog, requiredToolNames);
+    const selectedTools = catalog.filter((tool) => requiredNames.has(tool.name));
     const servers = Array.from(new Set(selectedTools.map((tool) => tool.server))).sort();
 
     return {
       tools: selectedTools,
       servers,
     };
+  }
+
+  /**
+   * Resolve logical declaration IDs and canonical capability names into the concrete
+   * toolkit tool names that are actually registered in the catalog.
+   */
+  resolveRequiredToolNames(
+    catalog: ToolCatalogEntry[],
+    requiredToolNames: string[],
+  ): Set<string> {
+    const directMatches = new Set<string>();
+    const exactToolNames = new Map<string, string>();
+
+    for (const entry of catalog) {
+      exactToolNames.set(ToolRegistry.canonicalize(entry.name), entry.name);
+    }
+
+    for (const required of requiredToolNames) {
+      const exactName = exactToolNames.get(ToolRegistry.canonicalize(required));
+      if (exactName) {
+        directMatches.add(exactName);
+        continue;
+      }
+
+      const canonical = CANONICAL_TOOL_MAP[required as keyof typeof CANONICAL_TOOL_MAP];
+      if (canonical) {
+        const mappedName = exactToolNames.get(ToolRegistry.canonicalize(canonical));
+        if (mappedName) {
+          directMatches.add(mappedName);
+          continue;
+        }
+      }
+
+      const aliasCandidates = ToolRegistry.logicalToolAliases[required]
+        ?? ToolRegistry.logicalToolAliases[required.replace(/[-_]+/g, '_')]
+        ?? [];
+
+      for (const alias of aliasCandidates) {
+        const aliasName = exactToolNames.get(ToolRegistry.canonicalize(alias));
+        if (aliasName) {
+          directMatches.add(aliasName);
+          break;
+        }
+      }
+    }
+
+    return directMatches;
   }
 }
