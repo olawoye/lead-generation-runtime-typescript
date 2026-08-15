@@ -94,4 +94,21 @@ describe('Capability-based tool planning', () => {
     expect(selected.tools.map((tool) => tool.name).sort()).toEqual(['maps_search_places', 'web_search']);
     expect(selected.servers.sort()).toEqual(['maps', 'web-search']);
   });
+
+  it('must resolve the canonical toolkit registry names used by the runtime contract', () => {
+    const fs = require('fs');
+    const path = require('path');
+    const manifestPath = path.resolve(__dirname, '../../mcp-toolkit/registry/tools.json');
+    const raw = fs.readFileSync(manifestPath, 'utf8');
+    const manifest = JSON.parse(raw) as { tools?: Array<{ name: string; capabilities?: string[] }> };
+    const registry = new ToolRegistry();
+    const catalog = manifest.tools ?? [];
+
+    const requiredNames = ['web_search', 'maps_search_places', 'company_directory_search', 'detect_technologies', 'lead_scoring'];
+    const selected = registry.selectByCatalog(catalog, requiredNames);
+
+    expect(selected.tools.map((tool) => tool.name).sort()).toEqual(
+      ['company_directory_search', 'detect_technologies', 'lead_scoring', 'maps_search_places', 'web_search'].sort(),
+    );
+  });
 });

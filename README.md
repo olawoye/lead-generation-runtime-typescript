@@ -38,6 +38,8 @@ This package is the stateless execution layer. It is responsible for:
 - emitting lifecycle events and deterministic checkpoint payloads
 - returning a complete execution result to the host
 
+This runtime relies on the shared MCP toolkit as the source of truth for tool definitions, server names, and capability tags. In practice, it reads and resolves entries from the toolkit registry in [../mcp-toolkit/registry/tools.json](../mcp-toolkit/registry/tools.json) and then maps logical runtime tool IDs to the concrete toolkit tool names before execution.
+
 The SaaS app owns the durable state. It decides how to:
 
 - persist checkpoints
