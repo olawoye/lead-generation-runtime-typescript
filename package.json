@@ -1,6 +1,6 @@
 {
   "name": "@olawoye/lead-generation-runtime-typescript",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Production-oriented, platform-agnostic TypeScript agent runtime for executing Agent Definitions via the MCP Toolkit",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
