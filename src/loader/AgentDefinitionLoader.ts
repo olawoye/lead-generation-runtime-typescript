@@ -30,6 +30,8 @@ const stepDefinitionSchema = {
     dependsOn: { type: 'array', items: { type: 'string' } },
     retry: retryPolicySchema,
     timeoutMs: { type: 'integer', minimum: 1 },
+    inputHints: { type: 'array', items: { type: 'string' } },
+    outputHints: { type: 'array', items: { type: 'string' } },
   },
   additionalProperties: false,
 };
@@ -181,6 +183,8 @@ export class AgentDefinitionLoader {
           tool: toolName,
           params: Object.keys(staticParams).length > 0 ? staticParams : undefined,
           dependsOn: Array.isArray(stepRecord.dependsOn) ? stepRecord.dependsOn.map(String) : [],
+          inputHints: Array.isArray(stepRecord.inputHints) ? stepRecord.inputHints.map(String) : undefined,
+          outputHints: Array.isArray(stepRecord.outputHints) ? stepRecord.outputHints.map(String) : undefined,
           retry: retryConfig,
           timeoutMs: stepTimeoutMs,
         };

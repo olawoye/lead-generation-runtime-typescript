@@ -76,4 +76,32 @@ describe('ExecutionContext', () => {
     ctx.recordResult(result);
     expect(ctx.allSucceeded(['a'])).toBe(false);
   });
+
+  it('supports optional step input mapping and a shared artifact bag', () => {
+    ctx.setOutput('prev', { companyName: 'Widget Co' });
+    ctx.addArtifact('candidateCompanies', [{ companyName: 'Widget Co' }]);
+    ctx.addArtifact('domains', ['widget.co']);
+
+    const inputs = ctx.buildStepInputs(
+      { extra: 'value' },
+      ['prev'],
+      (base) => ({
+        ...base,
+        narrowedCompany: base.prev?.companyName,
+        shortlist: ctx.getArtifacts().candidateCompanies,
+      }),
+    );
+
+    expect(inputs).toMatchObject({
+      seed: 'initial',
+      prev: { companyName: 'Widget Co' },
+      extra: 'value',
+      narrowedCompany: 'Widget Co',
+      shortlist: [{ companyName: 'Widget Co' }],
+    });
+    expect(ctx.getArtifacts()).toMatchObject({
+      candidateCompanies: [{ companyName: 'Widget Co' }],
+      domains: ['widget.co'],
+    });
+  });
 });

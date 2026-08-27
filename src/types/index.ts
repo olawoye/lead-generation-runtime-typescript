@@ -39,6 +39,10 @@ export interface StepDefinition {
   inputs?: string[] | Record<string, unknown>;
   /** Declarative step output names. */
   outputs?: string[] | Record<string, unknown>;
+  /** Optional hint list for narrowing the inputs passed to this step. */
+  inputHints?: string[];
+  /** Optional hint list for what shape of outputs this step is expected to emit. */
+  outputHints?: string[];
   /** Whether the step is currently enabled. */
   enabled?: boolean;
   /** Additional step-level configuration values. */
@@ -98,6 +102,8 @@ export interface DeclarativeStepDefinition {
   tools?: string[];
   inputs?: unknown;
   outputs?: unknown;
+  inputHints?: string[];
+  outputHints?: string[];
   dependsOn?: string[];
   configuration?: Record<string, unknown>;
   policy?: Record<string, unknown>;

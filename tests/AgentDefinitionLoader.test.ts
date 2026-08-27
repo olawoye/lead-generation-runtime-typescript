@@ -163,4 +163,33 @@ describe('AgentDefinitionLoader', () => {
     expect(def.steps).toHaveLength(2);
     expect(def.steps[0].id).toBe('search_engine_prospecting');
   });
+
+  it('retains declarative step inputHints and outputHints without changing runtime behavior', () => {
+    const raw = {
+      apiVersion: 'agent.definition/v1',
+      kind: 'AgentDefinition',
+      metadata: {
+        name: 'guided-agent',
+        displayName: 'Guided Agent',
+      },
+      spec: {
+        steps: [
+          {
+            id: 'seed',
+            name: 'Seed',
+            enabled: true,
+            tools: ['search_web'],
+            inputs: ['brief'],
+            outputs: ['results'],
+            inputHints: ['keywords', 'industry'],
+            outputHints: ['qualifiedLeads'],
+          },
+        ],
+      },
+    };
+
+    const def = loader.load(raw);
+    expect(def.steps[0].inputHints).toEqual(['keywords', 'industry']);
+    expect(def.steps[0].outputHints).toEqual(['qualifiedLeads']);
+  });
 });

@@ -13,6 +13,7 @@ import { StepResult } from '../types';
 export class ExecutionContext {
   private readonly outputs = new Map<string, unknown>();
   private readonly results: StepResult[] = [];
+  private readonly artifacts: Record<string, unknown> = {};
 
   constructor(
     public readonly executionId: string,
@@ -44,16 +45,32 @@ export class ExecutionContext {
   buildStepInputs(
     staticParams: Record<string, unknown> = {},
     dependsOn: string[] = [],
+    stepInputMapper?: (baseInputs: Record<string, unknown>) => Record<string, unknown>,
   ): Record<string, unknown> {
     const depOutputs: Record<string, unknown> = {};
     for (const depId of dependsOn) {
       depOutputs[depId] = this.getOutput(depId);
     }
-    return {
+
+    const baseInputs = {
       ...this.initialInputs,
       ...depOutputs,
       ...staticParams,
     };
+
+    if (typeof stepInputMapper === 'function') {
+      return stepInputMapper(baseInputs);
+    }
+
+    return baseInputs;
+  }
+
+  addArtifact(key: string, value: unknown): void {
+    this.artifacts[key] = value;
+  }
+
+  getArtifacts(): Record<string, unknown> {
+    return { ...this.artifacts };
   }
 
   /** Record the result of a completed step. */
