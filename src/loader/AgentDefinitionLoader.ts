@@ -1,6 +1,6 @@
 import Ajv, { ValidateFunction } from 'ajv';
 import addFormats from 'ajv-formats';
-import { AgentDefinition } from '../types';
+import { AgentDefinition, StepDefinition } from '../types';
 
 // ---------------------------------------------------------------------------
 // JSON Schema for AgentDefinition v1.0
@@ -191,23 +191,26 @@ export class AgentDefinitionLoader {
           ...(typeof stepRecord.enabled !== 'undefined' ? { enabled: stepRecord.enabled } : {}),
         };
 
+        const rawExtractionContract = stepRecord.extractionContract as Record<string, unknown> | undefined;
         const extractionContract =
-          typeof stepRecord.extractionContract === 'object' && stepRecord.extractionContract !== null
+          typeof rawExtractionContract === 'object' && rawExtractionContract !== null
             ? {
-                target: typeof (stepRecord.extractionContract as Record<string, unknown>).target === 'string'
-                  ? ((stepRecord.extractionContract as Record<string, unknown>).target as string)
+                target: typeof rawExtractionContract.target === 'string' &&
+                  ['company', 'person', 'lead', 'event', 'signal'].includes(rawExtractionContract.target as string)
+                  ? rawExtractionContract.target as StepDefinition['extractionContract'] extends infer T ? T extends { target?: infer U } ? U : never : never
                   : undefined,
-                fields: Array.isArray((stepRecord.extractionContract as Record<string, unknown>).fields)
-                  ? ((stepRecord.extractionContract as Record<string, unknown>).fields as unknown[]).map(String)
+                fields: Array.isArray(rawExtractionContract.fields)
+                  ? (rawExtractionContract.fields as unknown[]).map(String)
                   : undefined,
-                mode: typeof (stepRecord.extractionContract as Record<string, unknown>).mode === 'string'
-                  ? ((stepRecord.extractionContract as Record<string, unknown>).mode as string)
+                mode: typeof rawExtractionContract.mode === 'string' &&
+                  ['llm', 'schema', 'regex', 'hybrid'].includes(rawExtractionContract.mode as string)
+                  ? rawExtractionContract.mode as 'llm' | 'schema' | 'regex' | 'hybrid'
                   : undefined,
-                requiredFields: Array.isArray((stepRecord.extractionContract as Record<string, unknown>).requiredFields)
-                  ? ((stepRecord.extractionContract as Record<string, unknown>).requiredFields as unknown[]).map(String)
+                requiredFields: Array.isArray(rawExtractionContract.requiredFields)
+                  ? (rawExtractionContract.requiredFields as unknown[]).map(String)
                   : undefined,
-                outputKey: typeof (stepRecord.extractionContract as Record<string, unknown>).outputKey === 'string'
-                  ? String((stepRecord.extractionContract as Record<string, unknown>).outputKey)
+                outputKey: typeof rawExtractionContract.outputKey === 'string'
+                  ? String(rawExtractionContract.outputKey)
                   : undefined,
               }
             : undefined;
@@ -224,7 +227,10 @@ export class AgentDefinitionLoader {
           queryStrategy: typeof stepRecord.queryStrategy === 'string' ? stepRecord.queryStrategy : undefined,
           queryTemplates: Array.isArray(stepRecord.queryTemplates) ? stepRecord.queryTemplates.map(String) : undefined,
           negativeTerms: Array.isArray(stepRecord.negativeTerms) ? stepRecord.negativeTerms.map(String) : undefined,
-          entityFocus: typeof stepRecord.entityFocus === 'string' ? stepRecord.entityFocus as StepDefinition['entityFocus'] : undefined,
+          entityFocus: typeof stepRecord.entityFocus === 'string' &&
+            ['company', 'person', 'lead', 'event', 'signal'].includes(stepRecord.entityFocus as string)
+            ? stepRecord.entityFocus as StepDefinition['entityFocus']
+            : undefined,
           extractionContract,
           retry: retryConfig,
           timeoutMs: stepTimeoutMs,
