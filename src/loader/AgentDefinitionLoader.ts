@@ -33,6 +33,7 @@ const stepDefinitionSchema = {
     inputHints: { type: 'array', items: { type: 'string' } },
     outputHints: { type: 'array', items: { type: 'string' } },
     queryStrategy: { type: 'string' },
+    extractionQuery: { type: 'string' },
     queryTemplates: { type: 'array', items: { type: 'string' } },
     negativeTerms: { type: 'array', items: { type: 'string' } },
     entityFocus: { type: 'string', enum: ['company', 'person', 'lead', 'event', 'signal'] },
@@ -225,6 +226,7 @@ export class AgentDefinitionLoader {
           inputHints: Array.isArray(stepRecord.inputHints) ? stepRecord.inputHints.map(String) : undefined,
           outputHints: Array.isArray(stepRecord.outputHints) ? stepRecord.outputHints.map(String) : undefined,
           queryStrategy: typeof stepRecord.queryStrategy === 'string' ? stepRecord.queryStrategy : undefined,
+          extractionQuery: typeof stepRecord.extractionQuery === 'string' ? stepRecord.extractionQuery : undefined,
           queryTemplates: Array.isArray(stepRecord.queryTemplates) ? stepRecord.queryTemplates.map(String) : undefined,
           negativeTerms: Array.isArray(stepRecord.negativeTerms) ? stepRecord.negativeTerms.map(String) : undefined,
           entityFocus: typeof stepRecord.entityFocus === 'string' &&

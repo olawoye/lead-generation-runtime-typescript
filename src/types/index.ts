@@ -53,6 +53,8 @@ export interface StepDefinition {
   outputHints?: string[];
   /** Optional guidance for generating a query tailored to this step." */
   queryStrategy?: string;
+  /** Optional extraction prompt used by a website/file extraction tool to tell the LLM what to pull from the target page. */
+  extractionQuery?: string;
   /** Optional query templates the runtime can use to rewrite the source brief for this step. */
   queryTemplates?: string[];
   /** Optional exclusions / low-signal terms to block from a step query. */
@@ -123,6 +125,7 @@ export interface DeclarativeStepDefinition {
   inputHints?: string[];
   outputHints?: string[];
   queryStrategy?: string;
+  extractionQuery?: string;
   queryTemplates?: string[];
   negativeTerms?: string[];
   entityFocus?: 'company' | 'person' | 'lead' | 'event' | 'signal';
