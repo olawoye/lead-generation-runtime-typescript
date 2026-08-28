@@ -111,4 +111,26 @@ describe('Capability-based tool planning', () => {
       ['company_directory_search', 'detect_technologies', 'lead_scoring', 'maps_search_places', 'web_search'].sort(),
     );
   });
+
+  it('supports yellow-pages fallback directory tools as runtime-resolvable capabilities', () => {
+    const manifest = {
+      version: '0.1.0',
+      tools: [
+        { name: 'yellow_pages_business_lookup', server: 'yellow-pages', capabilities: ['directory-contact-fallback'] },
+        { name: 'yellow_pages_person_lookup', server: 'yellow-pages', capabilities: ['directory-person-fallback'] },
+      ],
+    };
+
+    const registry = new ToolRegistry();
+    registry.register('yellow_pages_business_lookup', jest.fn());
+    registry.register('yellow_pages_person_lookup', jest.fn());
+
+    const selected = registry.selectByCatalog(manifest.tools, ['yellow_pages_business_lookup', 'yellow_pages_person_lookup']);
+
+    expect(selected.tools.map((tool) => tool.name).sort()).toEqual([
+      'yellow_pages_business_lookup',
+      'yellow_pages_person_lookup',
+    ]);
+    expect(selected.servers).toEqual(['yellow-pages']);
+  });
 });

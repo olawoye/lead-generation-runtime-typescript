@@ -60,6 +60,12 @@ export const CANONICAL_TOOL_MAP = {
   signal_monitoring: 'signal_monitoring',
   company_enrichment: 'enrich_company',
   person_enrichment: 'enrich_person',
+  yellow_pages_business_lookup: 'yellow_pages_business_lookup',
+  yellow_pages_person_lookup: 'yellow_pages_person_lookup',
+  yellow_pages_business: 'yellow_pages_business_lookup',
+  yellow_pages_person: 'yellow_pages_person_lookup',
+  directory_contact_fallback: 'yellow_pages_business_lookup',
+  person_contact_lookup: 'yellow_pages_person_lookup',
   lead_scoring: 'lead_scoring',
 } as const;
 
@@ -93,6 +99,12 @@ export class ToolRegistry {
     signal_monitoring: ['signal_monitoring'],
     company_enrichment: ['enrich_company'],
     person_enrichment: ['enrich_person'],
+    yellow_pages_business_lookup: ['yellow_pages_business_lookup', 'yellow_pages_business'],
+    yellow_pages_person_lookup: ['yellow_pages_person_lookup', 'yellow_pages_person'],
+    yellow_pages_business: ['yellow_pages_business_lookup'],
+    yellow_pages_person: ['yellow_pages_person_lookup'],
+    directory_contact_fallback: ['yellow_pages_business_lookup'],
+    person_contact_lookup: ['yellow_pages_person_lookup'],
   };
 
   /** Register (or replace) a tool handler. */
