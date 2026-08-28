@@ -13,6 +13,14 @@
 export type AgentDefinitionVersion = '1.0';
 
 /** A single declarative step inside an Agent Definition. */
+export interface ExtractionContract {
+  target?: 'company' | 'person' | 'lead' | 'event' | 'signal';
+  fields?: string[];
+  mode?: 'llm' | 'schema' | 'regex' | 'hybrid';
+  requiredFields?: string[];
+  outputKey?: string;
+}
+
 export interface StepDefinition {
   /** Unique identifier for the step within this definition. */
   id: string;
@@ -43,6 +51,16 @@ export interface StepDefinition {
   inputHints?: string[];
   /** Optional hint list for what shape of outputs this step is expected to emit. */
   outputHints?: string[];
+  /** Optional guidance for generating a query tailored to this step." */
+  queryStrategy?: string;
+  /** Optional query templates the runtime can use to rewrite the source brief for this step. */
+  queryTemplates?: string[];
+  /** Optional exclusions / low-signal terms to block from a step query. */
+  negativeTerms?: string[];
+  /** Preferred target entity type for this step, e.g. company, person, lead, event. */
+  entityFocus?: 'company' | 'person' | 'lead' | 'event' | 'signal';
+  /** Optional extraction contract describing the canonical shape for downstream lead normalization. */
+  extractionContract?: ExtractionContract;
   /** Whether the step is currently enabled. */
   enabled?: boolean;
   /** Additional step-level configuration values. */
@@ -104,6 +122,11 @@ export interface DeclarativeStepDefinition {
   outputs?: unknown;
   inputHints?: string[];
   outputHints?: string[];
+  queryStrategy?: string;
+  queryTemplates?: string[];
+  negativeTerms?: string[];
+  entityFocus?: 'company' | 'person' | 'lead' | 'event' | 'signal';
+  extractionContract?: ExtractionContract;
   dependsOn?: string[];
   configuration?: Record<string, unknown>;
   policy?: Record<string, unknown>;

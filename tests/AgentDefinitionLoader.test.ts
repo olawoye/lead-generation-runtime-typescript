@@ -192,4 +192,47 @@ describe('AgentDefinitionLoader', () => {
     expect(def.steps[0].inputHints).toEqual(['keywords', 'industry']);
     expect(def.steps[0].outputHints).toEqual(['qualifiedLeads']);
   });
+
+  it('retains step query strategy and extraction contract metadata for downstream lead normalization', () => {
+    const raw = {
+      apiVersion: 'agent.definition/v1',
+      kind: 'AgentDefinition',
+      metadata: {
+        name: 'search-guided-agent',
+        displayName: 'Search Guided Agent',
+      },
+      spec: {
+        steps: [
+          {
+            id: 'search_seed',
+            name: 'Search Seed',
+            enabled: true,
+            tools: ['web_search'],
+            inputs: ['brief'],
+            outputs: ['results'],
+            queryStrategy: 'local-service-intent',
+            queryTemplates: ['"${industry}" "${city}" -job -salary'],
+            negativeTerms: ['job', 'salary', 'resume'],
+            entityFocus: 'company',
+            extractionContract: {
+              target: 'company',
+              fields: ['company_name', 'domain', 'website_url', 'location'],
+              mode: 'llm',
+            },
+          },
+        ],
+      },
+    };
+
+    const def = loader.load(raw);
+    expect(def.steps[0].queryStrategy).toBe('local-service-intent');
+    expect(def.steps[0].queryTemplates).toEqual(['"${industry}" "${city}" -job -salary']);
+    expect(def.steps[0].negativeTerms).toEqual(['job', 'salary', 'resume']);
+    expect(def.steps[0].entityFocus).toBe('company');
+    expect(def.steps[0].extractionContract).toEqual({
+      target: 'company',
+      fields: ['company_name', 'domain', 'website_url', 'location'],
+      mode: 'llm',
+    });
+  });
 });

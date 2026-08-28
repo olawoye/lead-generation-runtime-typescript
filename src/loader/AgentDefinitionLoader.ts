@@ -32,6 +32,21 @@ const stepDefinitionSchema = {
     timeoutMs: { type: 'integer', minimum: 1 },
     inputHints: { type: 'array', items: { type: 'string' } },
     outputHints: { type: 'array', items: { type: 'string' } },
+    queryStrategy: { type: 'string' },
+    queryTemplates: { type: 'array', items: { type: 'string' } },
+    negativeTerms: { type: 'array', items: { type: 'string' } },
+    entityFocus: { type: 'string', enum: ['company', 'person', 'lead', 'event', 'signal'] },
+    extractionContract: {
+      type: 'object',
+      properties: {
+        target: { type: 'string', enum: ['company', 'person', 'lead', 'event', 'signal'] },
+        fields: { type: 'array', items: { type: 'string' } },
+        mode: { type: 'string', enum: ['llm', 'schema', 'regex', 'hybrid'] },
+        requiredFields: { type: 'array', items: { type: 'string' } },
+        outputKey: { type: 'string' },
+      },
+      additionalProperties: false,
+    },
   },
   additionalProperties: false,
 };
@@ -176,6 +191,27 @@ export class AgentDefinitionLoader {
           ...(typeof stepRecord.enabled !== 'undefined' ? { enabled: stepRecord.enabled } : {}),
         };
 
+        const extractionContract =
+          typeof stepRecord.extractionContract === 'object' && stepRecord.extractionContract !== null
+            ? {
+                target: typeof (stepRecord.extractionContract as Record<string, unknown>).target === 'string'
+                  ? ((stepRecord.extractionContract as Record<string, unknown>).target as string)
+                  : undefined,
+                fields: Array.isArray((stepRecord.extractionContract as Record<string, unknown>).fields)
+                  ? ((stepRecord.extractionContract as Record<string, unknown>).fields as unknown[]).map(String)
+                  : undefined,
+                mode: typeof (stepRecord.extractionContract as Record<string, unknown>).mode === 'string'
+                  ? ((stepRecord.extractionContract as Record<string, unknown>).mode as string)
+                  : undefined,
+                requiredFields: Array.isArray((stepRecord.extractionContract as Record<string, unknown>).requiredFields)
+                  ? ((stepRecord.extractionContract as Record<string, unknown>).requiredFields as unknown[]).map(String)
+                  : undefined,
+                outputKey: typeof (stepRecord.extractionContract as Record<string, unknown>).outputKey === 'string'
+                  ? String((stepRecord.extractionContract as Record<string, unknown>).outputKey)
+                  : undefined,
+              }
+            : undefined;
+
         return {
           id: String(stepRecord.id ?? 'unnamed-step'),
           name: String(stepRecord.name ?? stepRecord.id ?? 'Unnamed Step'),
@@ -185,6 +221,11 @@ export class AgentDefinitionLoader {
           dependsOn: Array.isArray(stepRecord.dependsOn) ? stepRecord.dependsOn.map(String) : [],
           inputHints: Array.isArray(stepRecord.inputHints) ? stepRecord.inputHints.map(String) : undefined,
           outputHints: Array.isArray(stepRecord.outputHints) ? stepRecord.outputHints.map(String) : undefined,
+          queryStrategy: typeof stepRecord.queryStrategy === 'string' ? stepRecord.queryStrategy : undefined,
+          queryTemplates: Array.isArray(stepRecord.queryTemplates) ? stepRecord.queryTemplates.map(String) : undefined,
+          negativeTerms: Array.isArray(stepRecord.negativeTerms) ? stepRecord.negativeTerms.map(String) : undefined,
+          entityFocus: typeof stepRecord.entityFocus === 'string' ? stepRecord.entityFocus as StepDefinition['entityFocus'] : undefined,
+          extractionContract,
           retry: retryConfig,
           timeoutMs: stepTimeoutMs,
         };
