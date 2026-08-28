@@ -66,6 +66,8 @@ export {
   AgentRuntime,
   Orchestrator,
   OrchestratorError,
+  normalizeLeadForCrm,
+  buildCrmLeadPayload,
   createPersistenceCallbacks,
   InMemoryExecutionStore,
   InMemoryExecutionRepository,

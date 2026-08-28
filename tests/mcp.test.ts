@@ -1,4 +1,5 @@
 import { ToolRegistry, ToolInvoker, ToolNotFoundError } from '../src/mcp';
+import { normalizeLeadForCrm } from '../src';
 import { ToolResult } from '../src/types';
 
 describe('ToolRegistry', () => {
@@ -132,5 +133,21 @@ describe('Capability-based tool planning', () => {
       'yellow_pages_person_lookup',
     ]);
     expect(selected.servers).toEqual(['yellow-pages']);
+  });
+
+  it('creates a deterministic placeholder email for CRM sync when a lead has no email', () => {
+    const lead = {
+      first_name: 'Jane',
+      last_name: 'Doe',
+      company_name: 'Acme Labs',
+      phone: '+1-555-0100',
+      domain: 'acme.com',
+    };
+
+    const normalized = normalizeLeadForCrm(lead);
+
+    expect(normalized.email).toMatch(/^lead-[a-z0-9]+@no-email-domain\.com$/);
+    expect(normalized.phone).toBe('+1-555-0100');
+    expect(normalized.company_name).toBe('Acme Labs');
   });
 });

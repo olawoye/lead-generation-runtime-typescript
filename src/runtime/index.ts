@@ -2,6 +2,7 @@ export { AgentRuntime } from './AgentRuntime';
 export type { AgentRuntimeOptions } from './AgentRuntime';
 export { Orchestrator, OrchestratorError } from './Orchestrator';
 export type { OrchestratorOptions } from './Orchestrator';
+export { normalizeLeadForCrm, buildCrmLeadPayload } from './crm';
 export { createPersistenceCallbacks } from './persistence';
 export { InMemoryExecutionStore } from './ExecutionStore';
 export type { ExecutionStore, ExecutionRecord } from './ExecutionStore';
