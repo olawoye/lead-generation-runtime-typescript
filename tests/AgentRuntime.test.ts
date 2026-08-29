@@ -98,6 +98,46 @@ describe('AgentRuntime – full integration', () => {
     expect(types).toContain('step.succeeded');
   });
 
+  it('emits candidate-surface classification events for tool results', async () => {
+    const runtime = new AgentRuntime();
+    const candidateEvents: Array<{ executionId: string; stepId: string; stepName: string; classification?: { kind: string } }> = [];
+
+    runtime.registerTool('search_web', async () => ({
+      success: true,
+      data: { results: ['Alpha Corp'] },
+      candidateSurfaces: [
+        {
+          id: 'surface-1',
+          title: 'Alpha Corp',
+          url: 'https://example.com/alpha',
+          classification: {
+            kind: 'needs-extraction',
+            reason: 'directory-like result',
+            targetTool: 'website_extraction',
+            instruction: 'Extract the company profile page',
+          },
+        },
+      ],
+    }));
+
+    await runtime.run(toolDef, {
+      callbacks: {
+        onCandidateSurface: (event) => {
+          candidateEvents.push({
+            executionId: event.executionId,
+            stepId: event.stepId,
+            stepName: event.stepName,
+            classification: event.candidateSurface.classification,
+          });
+        },
+      },
+    });
+
+    expect(candidateEvents).toHaveLength(1);
+    expect(candidateEvents[0].classification?.kind).toBe('needs-extraction');
+    expect(candidateEvents[0].stepId).toBe('search_web');
+  });
+
   it('emits deterministic checkpoint payloads and callbacks for stateless runs', async () => {
     const runtime = new AgentRuntime();
     const stepStarts: Array<{ executionId: string; stepId: string }> = [];

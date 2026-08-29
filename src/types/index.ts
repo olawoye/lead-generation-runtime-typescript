@@ -230,6 +230,17 @@ export interface RuntimeCallbacks {
   onCheckpoint?: (checkpoint: RunCheckpoint) => void;
   onRunError?: (event: RunErrorEvent) => void;
   onRunEnd?: (result: ExecutionResult) => void;
+  onCandidateSurface?: (event: {
+    executionId: string;
+    stepId: string;
+    stepName: string;
+    candidateSurface: {
+      id?: string;
+      title?: string | null;
+      url?: string | null;
+      classification?: CandidateSurfaceClassification;
+    };
+  }) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -243,10 +254,24 @@ export interface ToolInput {
 }
 
 /** Response returned from an MCP tool. */
+export interface CandidateSurfaceClassification {
+  kind: 'direct-lead' | 'needs-extraction' | 'skip';
+  reason?: string;
+  targetTool?: string;
+  targetField?: string;
+  instruction?: string;
+}
+
 export interface ToolResult {
   success: boolean;
   data?: unknown;
   error?: string;
+  candidateSurfaces?: Array<{
+    id?: string;
+    title?: string | null;
+    url?: string | null;
+    classification?: CandidateSurfaceClassification;
+  }>;
 }
 
 // ---------------------------------------------------------------------------

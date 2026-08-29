@@ -276,7 +276,7 @@ export class Orchestrator {
       let error: string | undefined;
 
       try {
-        output = await this.dispatchStep(definition, stepInputs, timeoutMs, executionId);
+        output = await this.dispatchStep(definition, stepInputs, timeoutMs, executionId, callbacks);
       } catch (err) {
         stepStatus = err instanceof TimeoutError ? 'timed_out' : 'failed';
         error = err instanceof Error ? err.message : String(err);
@@ -381,12 +381,13 @@ export class Orchestrator {
     inputs: Record<string, unknown>,
     timeoutMs: number,
     executionId: string,
+    callbacks: RuntimeCallbacks,
   ): Promise<unknown> {
     const stepType = step.type ?? (step.tool ? 'tool' : step.provider ? 'llm' : 'noop');
 
     switch (stepType) {
       case 'tool':
-        return this.dispatchTool(step.tool!, inputs, timeoutMs, executionId);
+        return this.dispatchTool(step.tool!, inputs, timeoutMs, executionId, callbacks);
       case 'llm':
         return this.dispatchLLM(step.provider!, inputs, timeoutMs, executionId);
       case 'noop':
@@ -401,6 +402,7 @@ export class Orchestrator {
     params: Record<string, unknown>,
     timeoutMs: number,
     executionId: string,
+    callbacks: RuntimeCallbacks,
   ): Promise<unknown> {
     this.emitter.emit('tool.invoked', executionId, { toolName, params });
 
@@ -411,6 +413,18 @@ export class Orchestrator {
     );
 
     this.emitter.emit('tool.result', executionId, { toolName, result });
+
+    const candidateSurfaces = Array.isArray(result.candidateSurfaces) ? result.candidateSurfaces : [];
+    for (const candidateSurface of candidateSurfaces) {
+      if (candidateSurface.classification) {
+        callbacks.onCandidateSurface?.({
+          executionId,
+          stepId: toolName,
+          stepName: toolName,
+          candidateSurface,
+        });
+      }
+    }
 
     if (!result.success) {
       throw new OrchestratorError(result.error ?? `Tool "${toolName}" returned failure`);

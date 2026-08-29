@@ -17,6 +17,7 @@ export type {
   RetryPolicy,
   ToolInput,
   ToolResult,
+  CandidateSurfaceClassification,
   LLMMessage,
   LLMRequest,
   LLMResponse,
