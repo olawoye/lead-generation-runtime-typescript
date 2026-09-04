@@ -104,4 +104,61 @@ describe('ExecutionContext', () => {
       domains: ['widget.co'],
     });
   });
+
+  it('parses and passes contextBridge values to downstream inputs', () => {
+    const output = {
+      company: {
+        name: 'Widget Co',
+        location: { city: 'Austin', state: 'TX' },
+      },
+    };
+
+    const mapped = ctx.applyContextBridge(output, {
+      parse: [
+        { from: 'output', path: '$.company.location.city', as: 'location.city', transform: 'string' },
+        { from: 'output', path: '$.company.name', as: 'company_name', transform: 'string' },
+      ],
+      pass: [
+        { from: 'location.city', to: 'location' },
+        { from: 'company_name', to: 'companyName' },
+      ],
+      fallback: 'preserve-existing-inputs',
+    });
+
+    expect(mapped.location).toBe('Austin');
+    expect(mapped.companyName).toBe('Widget Co');
+    expect(ctx.getContext()).toMatchObject({
+      'location.city': 'Austin',
+      company_name: 'Widget Co',
+    });
+  });
+
+  it('resolves nested tool param targets explicitly and keeps parsing strict', () => {
+    const nested = ExecutionContext.resolveNestedTarget(
+      { tool: { params: {} } },
+      'tool.params.location',
+      'Austin, TX',
+    );
+
+    expect(nested).toMatchObject({
+      tool: { params: { location: 'Austin, TX' } },
+    });
+
+    const strict = ExecutionContext.applyStrictParseRules(
+      {
+        company: { name: 'Widget Co', location: 'Austin, TX' },
+      },
+      {
+        company_name: 'Widget Co',
+        location: 'Austin, TX',
+      },
+      ['company_name', 'location'],
+    );
+
+    expect(strict).toMatchObject({
+      company_name: 'Widget Co',
+      location: 'Austin, TX',
+    });
+    expect(Object.keys(strict)).toEqual(['company_name', 'location']);
+  });
 });

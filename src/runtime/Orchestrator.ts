@@ -285,6 +285,10 @@ export class Orchestrator {
 
       if (stepStatus === 'succeeded') {
         ctx.setOutput(definition.id, output);
+        const contextBridgeOutput = ctx.applyContextBridge(output, definition.contextBridge);
+        if (Object.keys(contextBridgeOutput).length > 0) {
+          Object.assign(stepInputs, contextBridgeOutput);
+        }
         const finishedAt = new Date();
         const result: StepResult = {
           stepId: definition.id,

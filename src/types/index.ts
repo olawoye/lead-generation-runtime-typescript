@@ -21,6 +21,29 @@ export interface ExtractionContract {
   outputKey?: string;
 }
 
+export interface ContextBridgeParseRule {
+  from?: 'output' | 'context' | 'input';
+  path?: string;
+  as?: string;
+  transform?: 'string' | 'number' | 'boolean' | 'json';
+  required?: boolean;
+}
+
+export interface ContextBridgePassRule {
+  from: string;
+  to: string;
+  required?: boolean;
+}
+
+export type ContextBridgeFallback = 'preserve-existing-inputs' | 'skip-mapping' | 'fail';
+
+export interface ContextBridge {
+  parse?: ContextBridgeParseRule[];
+  pass?: ContextBridgePassRule[];
+  fallback?: ContextBridgeFallback;
+  scope?: 'step' | 'run';
+}
+
 export interface StepDefinition {
   /** Unique identifier for the step within this definition. */
   id: string;
@@ -63,6 +86,8 @@ export interface StepDefinition {
   entityFocus?: 'company' | 'person' | 'lead' | 'event' | 'signal';
   /** Optional extraction contract describing the canonical shape for downstream lead normalization. */
   extractionContract?: ExtractionContract;
+  /** Optional step-level context bridge that parses output values and passes them to downstream inputs. */
+  contextBridge?: ContextBridge;
   /** Whether the step is currently enabled. */
   enabled?: boolean;
   /** Additional step-level configuration values. */
@@ -130,6 +155,7 @@ export interface DeclarativeStepDefinition {
   negativeTerms?: string[];
   entityFocus?: 'company' | 'person' | 'lead' | 'event' | 'signal';
   extractionContract?: ExtractionContract;
+  contextBridge?: ContextBridge;
   dependsOn?: string[];
   configuration?: Record<string, unknown>;
   policy?: Record<string, unknown>;

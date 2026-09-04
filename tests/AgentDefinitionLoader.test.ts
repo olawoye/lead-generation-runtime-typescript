@@ -235,4 +235,40 @@ describe('AgentDefinitionLoader', () => {
       mode: 'llm',
     });
   });
+
+  it('retains optional contextBridge configuration for parsing and passing values between steps', () => {
+    const raw = {
+      apiVersion: 'agent.definition/v1',
+      kind: 'AgentDefinition',
+      metadata: {
+        name: 'context-aware-agent',
+        displayName: 'Context Aware Agent',
+      },
+      spec: {
+        steps: [
+          {
+            id: 'company_lookup',
+            name: 'Company Lookup',
+            enabled: true,
+            tools: ['company_search'],
+            outputs: ['company'],
+            contextBridge: {
+              parse: [
+                { from: 'output', path: '$.company.location', as: 'location', transform: 'string' },
+              ],
+              pass: [{ from: 'location', to: 'city' }],
+              fallback: 'preserve-existing-inputs',
+            },
+          },
+        ],
+      },
+    };
+
+    const def = loader.load(raw);
+    expect(def.steps[0].contextBridge).toEqual({
+      parse: [{ from: 'output', path: '$.company.location', as: 'location', transform: 'string' }],
+      pass: [{ from: 'location', to: 'city' }],
+      fallback: 'preserve-existing-inputs',
+    });
+  });
 });

@@ -48,6 +48,40 @@ const stepDefinitionSchema = {
       },
       additionalProperties: false,
     },
+    contextBridge: {
+      type: 'object',
+      properties: {
+        parse: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              from: { type: 'string', enum: ['output', 'context', 'input'] },
+              path: { type: 'string' },
+              as: { type: 'string' },
+              transform: { type: 'string', enum: ['string', 'number', 'boolean', 'json'] },
+              required: { type: 'boolean' },
+            },
+            additionalProperties: false,
+          },
+        },
+        pass: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              from: { type: 'string' },
+              to: { type: 'string' },
+              required: { type: 'boolean' },
+            },
+            additionalProperties: false,
+          },
+        },
+        fallback: { type: 'string', enum: ['preserve-existing-inputs', 'skip-mapping', 'fail'] },
+        scope: { type: 'string', enum: ['step', 'run'] },
+      },
+      additionalProperties: false,
+    },
   },
   additionalProperties: false,
 };
@@ -216,6 +250,45 @@ export class AgentDefinitionLoader {
               }
             : undefined;
 
+        const rawContextBridge = stepRecord.contextBridge as Record<string, unknown> | undefined;
+        const contextBridge =
+          typeof rawContextBridge === 'object' && rawContextBridge !== null
+            ? {
+                parse: Array.isArray(rawContextBridge.parse)
+                  ? (rawContextBridge.parse as unknown[]).map((rule) => {
+                      const entry = rule as Record<string, unknown>;
+                      return {
+                        from: typeof entry.from === 'string' && ['output', 'context', 'input'].includes(entry.from as string)
+                          ? entry.from as 'output' | 'context' | 'input'
+                          : 'output',
+                        path: typeof entry.path === 'string' ? entry.path : undefined,
+                        as: typeof entry.as === 'string' ? entry.as : undefined,
+                        transform: typeof entry.transform === 'string' && ['string', 'number', 'boolean', 'json'].includes(entry.transform as string)
+                          ? entry.transform as 'string' | 'number' | 'boolean' | 'json'
+                          : undefined,
+                        required: typeof entry.required === 'boolean' ? entry.required : undefined,
+                      };
+                    })
+                  : undefined,
+                pass: Array.isArray(rawContextBridge.pass)
+                  ? (rawContextBridge.pass as unknown[]).map((rule) => {
+                      const entry = rule as Record<string, unknown>;
+                      return {
+                        from: typeof entry.from === 'string' ? entry.from : '',
+                        to: typeof entry.to === 'string' ? entry.to : '',
+                        required: typeof entry.required === 'boolean' ? entry.required : undefined,
+                      };
+                    })
+                  : undefined,
+                fallback: typeof rawContextBridge.fallback === 'string' && ['preserve-existing-inputs', 'skip-mapping', 'fail'].includes(rawContextBridge.fallback as string)
+                  ? rawContextBridge.fallback as 'preserve-existing-inputs' | 'skip-mapping' | 'fail'
+                  : undefined,
+                scope: typeof rawContextBridge.scope === 'string' && ['step', 'run'].includes(rawContextBridge.scope as string)
+                  ? rawContextBridge.scope as 'step' | 'run'
+                  : undefined,
+              }
+            : undefined;
+
         return {
           id: String(stepRecord.id ?? 'unnamed-step'),
           name: String(stepRecord.name ?? stepRecord.id ?? 'Unnamed Step'),
@@ -234,6 +307,7 @@ export class AgentDefinitionLoader {
             ? stepRecord.entityFocus as StepDefinition['entityFocus']
             : undefined,
           extractionContract,
+          contextBridge,
           retry: retryConfig,
           timeoutMs: stepTimeoutMs,
         };
