@@ -14,6 +14,7 @@ export interface CrmLeadLike {
   mobile_phone?: string | null;
   job_title?: string | null;
   title?: string | null;
+  about_company?: string | null;
   [key: string]: unknown;
 }
 
@@ -49,6 +50,7 @@ export function normalizeLeadForCrm<T extends CrmLeadLike>(lead: T): T & {
   name?: string;
   phone?: string;
   domain?: string;
+  about_company?: string;
 } {
   const normalized = { ...lead } as T & {
     email: string;
@@ -89,6 +91,7 @@ export function normalizeLeadForCrm<T extends CrmLeadLike>(lead: T): T & {
   normalized.name = normalizeText(lead.name) ?? (fallbackName || undefined);
   normalized.phone = normalizeText(lead.phone) ?? normalizeText(lead.mobile_phone) ?? undefined;
   normalized.domain = normalizeText(lead.domain) ?? normalizeText(lead.website) ?? undefined;
+  normalized.about_company = normalizeText(lead.about_company) ?? undefined;
 
   return normalized;
 }
@@ -101,6 +104,7 @@ export function buildCrmLeadPayload<T extends CrmLeadLike>(lead: T): T & {
   name?: string;
   phone?: string;
   domain?: string;
+  about_company?: string;
   crm_sync_status?: 'placeholder_email';
 } {
   const normalized = normalizeLeadForCrm(lead);
