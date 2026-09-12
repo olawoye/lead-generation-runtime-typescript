@@ -60,6 +60,7 @@ export function normalizeLeadForCrm<T extends CrmLeadLike>(lead: T): T & {
     name?: string;
     phone?: string;
     domain?: string;
+    about_company?: string;
   };
 
   const chosenEmail =
